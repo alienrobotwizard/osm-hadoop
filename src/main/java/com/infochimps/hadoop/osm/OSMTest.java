@@ -1,6 +1,7 @@
 package com.infochimps.hadoop.osm;
 
 import java.io.IOException;
+import java.io.StringReader;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -20,16 +21,49 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 
+import org.xml.sax.InputSource;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+
 public class OSMTest extends Configured implements Tool {
 
     private final static Log LOG = LogFactory.getLog(OSMTest.class);
-    
+    private final static DocumentBuilderFactory dbf = DocumentBuilderFactory.newInstance();
+
+
     public static class OSMMapper extends Mapper<LongWritable, Text, NullWritable, Text> {
 
+        DocumentBuilder docBuilder;
         public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String newVal = "record ["+value.toString()+"]";
-            context.write(NullWritable.get(), new Text(newVal));
+            
+            try {
+                
+                // Read the string value into an xml input source
+                InputSource xmlSource = new InputSource();
+                xmlSource.setCharacterStream(new StringReader(value.toString()));
+                Document record = docBuilder.parse(xmlSource);
+
+                //
+                // TODO: Read the record and do interesting happy-fun-magic with it
+                //
+                
+                context.write(NullWritable.get(), new Text(record.getDocumentElement().getTagName())); // foobar, test
+                
+            } catch (Exception e) {
+                // Probably bad record, increment counter
+            }
         }
+
+        protected void setup(org.apache.hadoop.mapreduce.Mapper.Context context) throws IOException, InterruptedException {
+            try {
+                this.docBuilder = dbf.newDocumentBuilder();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+
+        } 
     }
 
     public int run(String[] args) throws Exception {
@@ -48,8 +82,7 @@ public class OSMTest extends Configured implements Tool {
             System.out.println(args[i]);
             other_args.add(args[i]);
         }
-        // Here we need _both_ an input path and an output path.
-        // Output stores failed records so they can be re-indexed
+
         FileInputFormat.setInputPaths(job, new Path(other_args.get(0)));
         FileOutputFormat.setOutputPath(job, new Path(other_args.get(1)));
     
